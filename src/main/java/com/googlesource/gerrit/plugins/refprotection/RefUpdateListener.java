@@ -4,15 +4,40 @@ import static org.eclipse.jgit.lib.Constants.R_HEADS;
 import static org.eclipse.jgit.lib.Constants.R_TAGS;
 
 import com.google.gerrit.extensions.events.GitReferenceUpdatedListener;
+import com.google.gerrit.extensions.restapi.AuthException;
+import com.google.gerrit.extensions.restapi.BadRequestException;
+import com.google.gerrit.extensions.restapi.ResourceConflictException;
+import com.google.gerrit.reviewdb.client.Project;
+import com.google.gerrit.server.CurrentUser;
+import com.google.gerrit.server.project.CreateBranch;
+import com.google.gerrit.server.project.NoSuchProjectException;
+import com.google.gerrit.server.project.ProjectControl;
+import com.google.gerrit.server.project.ProjectResource;
+import com.google.inject.Inject;
 
 import org.eclipse.jgit.lib.ObjectId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
 class RefUpdateListener implements GitReferenceUpdatedListener {
 
   private static final Logger log = LoggerFactory
       .getLogger(RefUpdateListener.class);
+  private final CreateBranch.Factory createBranchFactory;
+  private final ProjectControl.GenericFactory projectControl;
+  private final CurrentUser user;
+
+  @Inject
+  RefUpdateListener(CreateBranch.Factory createBranchFactory,
+      ProjectControl.GenericFactory p, CurrentUser user) {
+    this.createBranchFactory = createBranchFactory;
+    this.projectControl = p;
+    this.user = user;
+  }
 
   @Override
   public void onGitReferenceUpdated(final Event event) {
@@ -29,7 +54,31 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
    * @param event the Event
    */
   private void createBackupBranch(Event event) {
-    // TODO
+    String branchName = event.getRefName().replaceFirst(R_HEADS, "");
+    try {
+      String branchPrefix = "";
+      int n = branchName.lastIndexOf("/");
+      if (n != -1) {
+        branchPrefix = branchName.substring(0, n + 1);
+        branchName = branchName.substring(n + 1);
+      }
+
+      String ref =
+          String.format("%sbackup-%s-%s", branchPrefix, branchName,
+              new SimpleDateFormat("YYYYMMdd-HHmmss").format(new Date()));
+
+      CreateBranch.Input input = new CreateBranch.Input();
+      input.ref = ref;
+      input.revision = event.getOldObjectId();
+      Project.NameKey nameKey = new Project.NameKey(event.getProjectName());
+      ProjectResource project =
+          new ProjectResource(projectControl.controlFor(nameKey, user));
+
+      createBranchFactory.create(ref).apply(project, input);
+    } catch (BadRequestException | AuthException | ResourceConflictException
+        | IOException | NoSuchProjectException e) {
+      log.error(e.getMessage(), e);
+    }
   }
 
   /**
