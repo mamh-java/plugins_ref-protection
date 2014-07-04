@@ -9,13 +9,18 @@ import com.google.gerrit.extensions.restapi.BadRequestException;
 import com.google.gerrit.extensions.restapi.ResourceConflictException;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.server.CurrentUser;
+import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.project.CreateBranch;
 import com.google.gerrit.server.project.NoSuchProjectException;
 import com.google.gerrit.server.project.ProjectControl;
 import com.google.gerrit.server.project.ProjectResource;
 import com.google.inject.Inject;
 
+import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevWalk;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,20 +35,30 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
   private final CreateBranch.Factory createBranchFactory;
   private final ProjectControl.GenericFactory projectControl;
   private final CurrentUser user;
+  private final GitRepositoryManager repoManager;
 
   @Inject
   RefUpdateListener(CreateBranch.Factory createBranchFactory,
-      ProjectControl.GenericFactory p, CurrentUser user) {
+      ProjectControl.GenericFactory p, CurrentUser user,
+      GitRepositoryManager repoManager) {
     this.createBranchFactory = createBranchFactory;
     this.projectControl = p;
     this.user = user;
+    this.repoManager = repoManager;
   }
 
   @Override
   public void onGitReferenceUpdated(final Event event) {
-    if (!isNewRef(event) && isRelevantRef(event)) {
-      if (isRefDeleted(event) || isNonFastForwardUpdate(event)) {
-        createBackupBranch(event);
+    if (isRelevantRef(event)) {
+      Project.NameKey nameKey = new Project.NameKey(event.getProjectName());
+      try {
+        ProjectResource project =
+            new ProjectResource(projectControl.controlFor(nameKey, user));
+        if (isRefDeleted(event) || isNonFastForwardUpdate(event, project)) {
+          createBackupBranch(event, project);
+        }
+      } catch (NoSuchProjectException | IOException e) {
+        log.error(e.getMessage(), e);
       }
     }
   }
@@ -53,7 +68,7 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
    *
    * @param event the Event
    */
-  private void createBackupBranch(Event event) {
+  private void createBackupBranch(Event event, ProjectResource project) {
     String branchName = event.getRefName().replaceFirst(R_HEADS, "");
     try {
       String branchPrefix = "";
@@ -70,13 +85,10 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
       CreateBranch.Input input = new CreateBranch.Input();
       input.ref = ref;
       input.revision = event.getOldObjectId();
-      Project.NameKey nameKey = new Project.NameKey(event.getProjectName());
-      ProjectResource project =
-          new ProjectResource(projectControl.controlFor(nameKey, user));
 
       createBranchFactory.create(ref).apply(project, input);
     } catch (BadRequestException | AuthException | ResourceConflictException
-        | IOException | NoSuchProjectException e) {
+        | IOException e) {
       log.error(e.getMessage(), e);
     }
   }
@@ -88,8 +100,9 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
    * @return True if relevant, otherwise False.
    */
   private boolean isRelevantRef(Event event) {
-    return event.getRefName().startsWith(R_HEADS)
-        || event.getRefName().startsWith(R_TAGS);
+    return (!isNewRef(event)) &&
+           (event.getRefName().startsWith(R_HEADS)
+            || event.getRefName().startsWith(R_TAGS));
   }
 
   /**
@@ -124,8 +137,25 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
    * @param event the Event
    * @return True if a non-fast-forward update, otherwise False.
    */
-  private boolean isNonFastForwardUpdate(Event event) {
-    // TODO
-    return false;
+  private boolean isNonFastForwardUpdate(Event event, ProjectResource project)
+      throws RepositoryNotFoundException, IOException {
+    Repository repo = null;
+    RevWalk walk = null;
+    try {
+      repo = repoManager.openRepository(project.getNameKey());
+      walk = new RevWalk(repo);
+      RevCommit oldCommit =
+          walk.parseCommit(repo.resolve(event.getOldObjectId()));
+      RevCommit newCommit =
+          walk.parseCommit(repo.resolve(event.getNewObjectId()));
+      return !walk.isMergedInto(oldCommit, newCommit);
+    } finally {
+      if (walk != null) {
+        walk.release();
+      }
+      if (repo != null) {
+        repo.close();
+      }
+    }
   }
 }
