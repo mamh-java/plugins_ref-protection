@@ -25,8 +25,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 
 class RefUpdateListener implements GitReferenceUpdatedListener {
 
@@ -70,24 +68,20 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
    * @param event the Event
    */
   private void createBackupBranch(Event event, ProjectResource project) {
-    String branchName = event.getRefName().replaceFirst(R_HEADS, "");
+    String branchName = event.getRefName();
+    String backupRef = BackupBranch.get(branchName);
+
+    // No-op if the backup branch name is same as the original
+    if (backupRef.equals(branchName)) {
+      return;
+    }
+
+    CreateBranch.Input input = new CreateBranch.Input();
+    input.ref = backupRef;
+    input.revision = event.getOldObjectId();
+
     try {
-      String branchPrefix = "";
-      int n = branchName.lastIndexOf("/");
-      if (n != -1) {
-        branchPrefix = branchName.substring(0, n + 1);
-        branchName = branchName.substring(n + 1);
-      }
-
-      String ref =
-          String.format("%sbackup-%s-%s", branchPrefix, branchName,
-              new SimpleDateFormat("YYYYMMdd-HHmmss").format(new Date()));
-
-      CreateBranch.Input input = new CreateBranch.Input();
-      input.ref = ref;
-      input.revision = event.getOldObjectId();
-
-      createBranchFactory.create(ref).apply(project, input);
+      createBranchFactory.create(backupRef).apply(project, input);
     } catch (BadRequestException | AuthException | ResourceConflictException
         | IOException e) {
       log.error(e.getMessage(), e);
