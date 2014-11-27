@@ -30,8 +30,8 @@ import java.util.Date;
 
 class RefUpdateListener implements GitReferenceUpdatedListener {
 
-  private static final Logger log = LoggerFactory
-      .getLogger(RefUpdateListener.class);
+  private static final Logger log =
+      LoggerFactory.getLogger(RefUpdateListener.class);
   private final CreateBranch.Factory createBranchFactory;
   private final ProjectControl.GenericFactory projectControl;
   private final CurrentUser user;
@@ -39,7 +39,8 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
 
   @Inject
   RefUpdateListener(CreateBranch.Factory createBranchFactory,
-      ProjectControl.GenericFactory p, CurrentUser user,
+      ProjectControl.GenericFactory p,
+      CurrentUser user,
       GitRepositoryManager repoManager) {
     this.createBranchFactory = createBranchFactory;
     this.projectControl = p;
