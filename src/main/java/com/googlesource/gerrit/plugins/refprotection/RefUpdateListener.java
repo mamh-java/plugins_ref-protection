@@ -134,22 +134,13 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
    */
   private boolean isNonFastForwardUpdate(Event event, ProjectResource project)
       throws RepositoryNotFoundException, IOException {
-    Repository repo = null;
-    RevWalk walk = null;
-    try {
-      repo = repoManager.openRepository(project.getNameKey());
-      walk = new RevWalk(repo);
-      RevCommit oldCommit =
-          walk.parseCommit(repo.resolve(event.getOldObjectId()));
-      RevCommit newCommit =
-          walk.parseCommit(repo.resolve(event.getNewObjectId()));
-      return !walk.isMergedInto(oldCommit, newCommit);
-    } finally {
-      if (walk != null) {
-        walk.release();
-      }
-      if (repo != null) {
-        repo.close();
+    try (Repository repo = repoManager.openRepository(project.getNameKey())) {
+      try (RevWalk walk = new RevWalk(repo)) {
+        RevCommit oldCommit =
+            walk.parseCommit(repo.resolve(event.getOldObjectId()));
+        RevCommit newCommit =
+            walk.parseCommit(repo.resolve(event.getNewObjectId()));
+        return !walk.isMergedInto(oldCommit, newCommit);
       }
     }
   }
