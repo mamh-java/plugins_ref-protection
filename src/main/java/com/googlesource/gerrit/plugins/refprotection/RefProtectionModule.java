@@ -32,5 +32,6 @@ public class RefProtectionModule extends AbstractModule {
   protected void configure() {
     DynamicSet.bind(binder(), GitReferenceUpdatedListener.class).to(
         RefUpdateListener.class);
+    requestStaticInjection(BackupRef.class);
   }
 }
