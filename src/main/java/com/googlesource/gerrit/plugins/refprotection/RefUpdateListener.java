@@ -127,6 +127,11 @@ class RefUpdateListener implements GitReferenceUpdatedListener {
    */
   private boolean isNonFastForwardUpdate(Event event, ProjectResource project)
       throws RepositoryNotFoundException, IOException {
+    if (isRefDeleted(event)) {
+      // Can't be non-fast-forward if the ref was deleted, and
+      // attempting a check would cause a MissingObjectException.
+      return false;
+    }
     try (Repository repo = repoManager.openRepository(project.getNameKey())) {
       try (RevWalk walk = new RevWalk(repo)) {
         RevCommit oldCommit =
