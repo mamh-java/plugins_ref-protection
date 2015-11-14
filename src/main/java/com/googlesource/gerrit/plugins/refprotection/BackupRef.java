@@ -35,8 +35,10 @@ import com.google.gerrit.server.project.ProjectResource;
 import com.google.inject.Inject;
 
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
+import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.revwalk.RevWalk;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,14 +73,24 @@ public class BackupRef {
       return;
     }
 
-    CreateBranch.Input input = new CreateBranch.Input();
-    input.ref = backupRef;
-    input.revision = event.refUpdate.oldRev;
+    try (Repository git = repoManager.openRepository(project.getNameKey())) {
+      try (RevWalk revWalk = new RevWalk(git)) {
+        CreateBranch.Input input = new CreateBranch.Input();
+        input.ref = backupRef;
+        // We need to parse the commit to ensure if it's a tag, we get the
+        // commit the tag points to!
+        input.revision =
+            ObjectId.toString(revWalk.parseCommit(ObjectId.fromString(event.refUpdate.oldRev))
+                .getId());
 
-    try {
-      createBranchFactory.create(backupRef).apply(project, input);
-    } catch (BadRequestException | AuthException | ResourceConflictException
-        | IOException e) {
+        try {
+          createBranchFactory.create(backupRef).apply(project, input);
+        } catch (BadRequestException | AuthException | ResourceConflictException
+            | IOException e) {
+          log.error(e.getMessage(), e);
+        }
+      }
+    } catch (IOException e) {
       log.error(e.getMessage(), e);
     }
   }
