@@ -31,6 +31,7 @@ import com.google.gerrit.common.EventListener;
 import com.google.gerrit.reviewdb.client.Project;
 import com.google.gerrit.server.CurrentUser;
 import com.google.gerrit.server.config.PluginConfigFactory;
+import com.google.gerrit.server.data.RefUpdateAttribute;
 import com.google.gerrit.server.events.Event;
 import com.google.gerrit.server.events.RefUpdatedEvent;
 import com.google.gerrit.server.git.GitRepositoryManager;
@@ -117,7 +118,7 @@ class RefUpdateListener implements EventListener {
    * @return True if a new ref, otherwise False.
    */
   private boolean isNewRef(RefUpdatedEvent event) {
-    return event.refUpdate.oldRev.equals(ObjectId.zeroId().getName());
+    return event.refUpdate.get().oldRev.equals(ObjectId.zeroId().getName());
   }
 
   /**
@@ -127,10 +128,11 @@ class RefUpdateListener implements EventListener {
    * @return True if a ref deletion, otherwise False.
    */
   private boolean isRefDeleted(RefUpdatedEvent event) {
-    if (event.refUpdate.newRev.equals(ObjectId.zeroId().getName())) {
+    RefUpdateAttribute refUpdate = event.refUpdate.get();
+    if (refUpdate.newRev.equals(ObjectId.zeroId().getName())) {
       log.info(String.format(
           "Ref Deleted: project [%s] refname [%s] old object id [%s]",
-          event.getProjectNameKey().toString(), event.getRefName(), event.refUpdate.oldRev));
+          event.getProjectNameKey().toString(), event.getRefName(), refUpdate.oldRev));
       return true;
     }
     return false;
@@ -149,12 +151,11 @@ class RefUpdateListener implements EventListener {
       // attempting a check would cause a MissingObjectException.
       return false;
     }
+    RefUpdateAttribute refUpdate = event.refUpdate.get();
     try (Repository repo = repoManager.openRepository(project.getNameKey())) {
       try (RevWalk walk = new RevWalk(repo)) {
-        RevCommit oldCommit =
-            walk.parseCommit(repo.resolve(event.refUpdate.oldRev));
-        RevCommit newCommit =
-            walk.parseCommit(repo.resolve(event.refUpdate.newRev));
+        RevCommit oldCommit = walk.parseCommit(repo.resolve(refUpdate.oldRev));
+        RevCommit newCommit = walk.parseCommit(repo.resolve(refUpdate.newRev));
         return !walk.isMergedInto(oldCommit, newCommit);
       }
     }

@@ -28,6 +28,8 @@ import com.google.gerrit.extensions.restapi.AuthException;
 import com.google.gerrit.extensions.restapi.BadRequestException;
 import com.google.gerrit.extensions.restapi.ResourceConflictException;
 import com.google.gerrit.server.config.PluginConfigFactory;
+import com.google.gerrit.server.data.AccountAttribute;
+import com.google.gerrit.server.data.RefUpdateAttribute;
 import com.google.gerrit.server.events.RefUpdatedEvent;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.project.CreateBranch;
@@ -84,24 +86,26 @@ public class BackupRef {
       }
 
       try (RevWalk revWalk = new RevWalk(git)) {
+        RefUpdateAttribute refUpdate = event.refUpdate.get();
         if (cfg.getFromGerritConfig(pluginName).getBoolean("createTag",
             false)) {
           TagBuilder tag = new TagBuilder();
+          AccountAttribute submitter = event.submitter.get();
           tag.setTagger(
-              new PersonIdent(event.submitter.name, event.submitter.email));
+              new PersonIdent(submitter.name, submitter.email));
           tag.setObjectId(revWalk
-              .parseCommit(ObjectId.fromString(event.refUpdate.oldRev)));
+              .parseCommit(ObjectId.fromString(refUpdate.oldRev)));
           String update = "Non-fast-forward update to";
-          if (event.refUpdate.newRev.equals(ObjectId.zeroId().getName())) {
+          if (refUpdate.newRev.equals(ObjectId.zeroId().getName())) {
             update = "Deleted";
           }
           String type = "branch";
           String fullMessage = "";
-          if (event.refUpdate.refName.startsWith(R_TAGS)) {
+          if (refUpdate.refName.startsWith(R_TAGS)) {
             type = "tag";
             try {
               RevTag origTag =
-                  revWalk.parseTag(ObjectId.fromString(event.refUpdate.oldRev));
+                  revWalk.parseTag(ObjectId.fromString(refUpdate.oldRev));
               SimpleDateFormat format = new SimpleDateFormat("EEE MMM d HH:mm:ss yyyy ZZZZ");
               PersonIdent taggerIdent = origTag.getTaggerIdent();
               String tagger =
@@ -117,7 +121,7 @@ public class BackupRef {
               log.warn("Unable to read original tag details", e);
             }
           }
-          tag.setMessage(update + " " + type + " " + event.refUpdate.refName + fullMessage);
+          tag.setMessage(update + " " + type + " " + refUpdate.refName + fullMessage);
           tag.setTag(backupRef);
 
           ObjectInserter inserter = git.newObjectInserter();
@@ -152,7 +156,7 @@ public class BackupRef {
           // We need to parse the commit to ensure if it's a tag, we get the
           // commit the tag points to!
           input.revision = ObjectId.toString(
-              revWalk.parseCommit(ObjectId.fromString(event.refUpdate.oldRev))
+              revWalk.parseCommit(ObjectId.fromString(refUpdate.oldRev))
                   .getId());
 
           try {
