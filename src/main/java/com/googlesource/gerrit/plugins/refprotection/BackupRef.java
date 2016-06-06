@@ -24,6 +24,7 @@
 package com.googlesource.gerrit.plugins.refprotection;
 
 import com.google.gerrit.extensions.annotations.PluginName;
+import com.google.gerrit.extensions.api.projects.BranchInput;
 import com.google.gerrit.extensions.restapi.AuthException;
 import com.google.gerrit.extensions.restapi.BadRequestException;
 import com.google.gerrit.extensions.restapi.ResourceConflictException;
@@ -151,7 +152,7 @@ public class BackupRef {
               log.error("Unknown error while creating backup tag");
           }
         } else {
-          CreateBranch.Input input = new CreateBranch.Input();
+          BranchInput input = new BranchInput();
           input.ref = backupRef;
           // We need to parse the commit to ensure if it's a tag, we get the
           // commit the tag points to!
