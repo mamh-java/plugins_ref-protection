@@ -7,7 +7,7 @@ else:
     '//gerrit-common:server',
     '//gerrit-reviewdb:server',
     '//gerrit-server:server',
-    '//lib/jgit:jgit',
+    '//lib/jgit/org.eclipse.jgit:jgit',
     '//lib:guava',
     '//lib:gwtorm',
    ]
