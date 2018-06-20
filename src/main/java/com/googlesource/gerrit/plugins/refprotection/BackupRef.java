@@ -23,6 +23,10 @@
  */
 package com.googlesource.gerrit.plugins.refprotection;
 
+import static org.eclipse.jgit.lib.Constants.R_HEADS;
+import static org.eclipse.jgit.lib.Constants.R_REFS;
+import static org.eclipse.jgit.lib.Constants.R_TAGS;
+
 import com.google.gerrit.extensions.annotations.PluginName;
 import com.google.gerrit.extensions.api.projects.BranchInput;
 import com.google.gerrit.extensions.restapi.AuthException;
@@ -36,7 +40,9 @@ import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.gerrit.server.project.CreateBranch;
 import com.google.gerrit.server.project.ProjectResource;
 import com.google.inject.Inject;
-
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import org.eclipse.jgit.errors.IncorrectObjectTypeException;
 import org.eclipse.jgit.errors.MissingObjectException;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
@@ -53,18 +59,9 @@ import org.eclipse.jgit.revwalk.RevWalk;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.eclipse.jgit.lib.Constants.R_HEADS;
-import static org.eclipse.jgit.lib.Constants.R_REFS;
-import static org.eclipse.jgit.lib.Constants.R_TAGS;
-
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-
 public class BackupRef {
   public static final String R_BACKUPS = R_REFS + "backups/";
-  private static final Logger log =
-      LoggerFactory.getLogger(BackupRef.class);
+  private static final Logger log = LoggerFactory.getLogger(BackupRef.class);
   private final CreateBranch.Factory createBranchFactory;
   @Inject private static PluginConfigFactory cfg;
   @Inject private static GitRepositoryManager repoManager;
@@ -88,14 +85,11 @@ public class BackupRef {
 
       try (RevWalk revWalk = new RevWalk(git)) {
         RefUpdateAttribute refUpdate = event.refUpdate.get();
-        if (cfg.getFromGerritConfig(pluginName).getBoolean("createTag",
-            false)) {
+        if (cfg.getFromGerritConfig(pluginName).getBoolean("createTag", false)) {
           TagBuilder tag = new TagBuilder();
           AccountAttribute submitter = event.submitter.get();
-          tag.setTagger(
-              new PersonIdent(submitter.name, submitter.email));
-          tag.setObjectId(revWalk
-              .parseCommit(ObjectId.fromString(refUpdate.oldRev)));
+          tag.setTagger(new PersonIdent(submitter.name, submitter.email));
+          tag.setObjectId(revWalk.parseCommit(ObjectId.fromString(refUpdate.oldRev)));
           String update = "Non-fast-forward update to";
           if (refUpdate.newRev.equals(ObjectId.zeroId().getName())) {
             update = "Deleted";
@@ -105,13 +99,14 @@ public class BackupRef {
           if (refUpdate.refName.startsWith(R_TAGS)) {
             type = "tag";
             try {
-              RevTag origTag =
-                  revWalk.parseTag(ObjectId.fromString(refUpdate.oldRev));
+              RevTag origTag = revWalk.parseTag(ObjectId.fromString(refUpdate.oldRev));
               SimpleDateFormat format = new SimpleDateFormat("EEE MMM d HH:mm:ss yyyy ZZZZ");
               PersonIdent taggerIdent = origTag.getTaggerIdent();
               String tagger =
-                  String.format("Tagger: %s <%s>\nDate:   %s",
-                      taggerIdent.getName(), taggerIdent.getEmailAddress(),
+                  String.format(
+                      "Tagger: %s <%s>\nDate:   %s",
+                      taggerIdent.getName(),
+                      taggerIdent.getEmailAddress(),
                       format.format(taggerIdent.getWhen()));
               fullMessage = "\n\nOriginal tag:\n" + tagger + "\n\n" + origTag.getFullMessage();
             } catch (MissingObjectException e) {
@@ -130,8 +125,7 @@ public class BackupRef {
           inserter.flush();
           RefUpdate tagRef = git.updateRef(tag.getTag());
           tagRef.setNewObjectId(tagId);
-          tagRef.setRefLogMessage("tagged deleted branch/tag " + tag.getTag(),
-              false);
+          tagRef.setRefLogMessage("tagged deleted branch/tag " + tag.getTag(), false);
           tagRef.setForceUpdate(false);
           Result result = tagRef.update();
           switch (result) {
@@ -156,14 +150,15 @@ public class BackupRef {
           input.ref = backupRef;
           // We need to parse the commit to ensure if it's a tag, we get the
           // commit the tag points to!
-          input.revision = ObjectId.toString(
-              revWalk.parseCommit(ObjectId.fromString(refUpdate.oldRev))
-                  .getId());
+          input.revision =
+              ObjectId.toString(revWalk.parseCommit(ObjectId.fromString(refUpdate.oldRev)).getId());
 
           try {
             createBranchFactory.create(backupRef).apply(project, input);
-          } catch (BadRequestException | AuthException
-              | ResourceConflictException | IOException e) {
+          } catch (BadRequestException
+              | AuthException
+              | ResourceConflictException
+              | IOException e) {
             log.error(e.getMessage(), e);
           }
         }
@@ -178,15 +173,15 @@ public class BackupRef {
   static String get(ProjectResource project, String refName) {
     if (cfg.getFromGerritConfig(pluginName).getBoolean("useTimestamp", true)) {
       return getTimestampBranch(refName);
-    }
-    else {
+    } else {
       return getSequentialBranch(project, refName);
     }
   }
 
   static String getTimestampBranch(String refName) {
     if (refName.startsWith(R_HEADS) || refName.startsWith(R_TAGS)) {
-      return String.format("%s-%s",
+      return String.format(
+          "%s-%s",
           R_BACKUPS + refName.replaceFirst(R_REFS, ""),
           new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date()));
     }
@@ -201,8 +196,7 @@ public class BackupRef {
       for (Ref ref : git.getAllRefs().values()) {
         String name = ref.getName();
         if (name.startsWith(R_BACKUPS + deletedName + "/")) {
-          Integer thisNum =
-              Integer.parseInt(name.substring(name.lastIndexOf('/') + 1));
+          Integer thisNum = Integer.parseInt(name.substring(name.lastIndexOf('/') + 1));
           if (thisNum >= rev) {
             rev = thisNum + 1;
           }

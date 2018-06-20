@@ -30,8 +30,7 @@ import com.google.inject.AbstractModule;
 public class RefProtectionModule extends AbstractModule {
   @Override
   protected void configure() {
-    DynamicSet.bind(binder(), EventListener.class).to(
-        RefUpdateListener.class);
+    DynamicSet.bind(binder(), EventListener.class).to(RefUpdateListener.class);
     requestStaticInjection(BackupRef.class);
   }
 }
