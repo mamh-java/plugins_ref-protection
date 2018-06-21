@@ -149,6 +149,8 @@ public class BackupRef {
             case NO_CHANGE:
             case REJECTED_CURRENT_BRANCH:
             case RENAMED:
+            case REJECTED_MISSING_OBJECT:
+            case REJECTED_OTHER_REASON:
             default:
               log.error("Unexpected result while creating backup tag: {}", result);
           }
