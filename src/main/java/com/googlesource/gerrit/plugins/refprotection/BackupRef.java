@@ -37,7 +37,9 @@ import com.google.gerrit.server.data.AccountAttribute;
 import com.google.gerrit.server.data.RefUpdateAttribute;
 import com.google.gerrit.server.events.RefUpdatedEvent;
 import com.google.gerrit.server.git.GitRepositoryManager;
+import com.google.gerrit.server.permissions.PermissionBackendException;
 import com.google.gerrit.server.project.CreateBranch;
+import com.google.gerrit.server.project.NoSuchProjectException;
 import com.google.gerrit.server.project.ProjectResource;
 import com.google.inject.Inject;
 import java.io.IOException;
@@ -163,7 +165,9 @@ public class BackupRef {
           } catch (BadRequestException
               | AuthException
               | ResourceConflictException
-              | IOException e) {
+              | IOException
+              | PermissionBackendException
+              | NoSuchProjectException e) {
             log.error(e.getMessage(), e);
           }
         }
