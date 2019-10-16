@@ -16,7 +16,7 @@ in the root of Gerrit's source tree to build
 The output is created in
 
 ```
-  bazel-genfiles/plugins/ref-protection/ref-protection.jar
+  bazel-bin/plugins/ref-protection/ref-protection.jar
 ```
 
 This project can be imported into the Eclipse IDE.
