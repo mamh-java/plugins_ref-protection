@@ -59,9 +59,9 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class BackupRef {
-  public static final String R_BACKUPS = R_REFS + "backups/";
-  private static final Logger log =
-      LoggerFactory.getLogger(BackupRef.class);
+  public static final String R_BACKUPS = "backup/";
+  static final Logger log = LoggerFactory.getLogger(RefProtectionLogFile.REFPROTECTION_LOG_NAME);
+
   private final CreateBranch.Factory createBranchFactory;
   @Inject private static PluginConfigFactory cfg;
   @Inject private static GitRepositoryManager repoManager;
@@ -156,6 +156,8 @@ public class BackupRef {
                   .getId());
 
           try {
+            log.info(String.format("Ref  Backup: project [%s] refname [%s] new branch id [%s]",
+                        event.getProjectNameKey().toString(), input.ref, input.revision));
             createBranchFactory.create(backupRef).apply(project, input);
           } catch (BadRequestException | AuthException
               | ResourceConflictException | IOException e) {
@@ -180,12 +182,18 @@ public class BackupRef {
   }
 
   private static String getTimestampBranch(String refName) {
-    if (refName.startsWith(R_HEADS) || refName.startsWith(R_TAGS)) {
-      return String.format("%s-%s",
-          R_BACKUPS + refName.replaceFirst(R_REFS, ""),
-          new SimpleDateFormat("YYYYMMdd-HHmmss").format(new Date()));
-    }
+    if (refName.startsWith(R_HEADS) ) {
+      String newRefName = String.format("%s_%s", R_HEADS + R_BACKUPS + refName.replaceFirst(R_HEADS, ""),
+                                    new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
 
+      return newRefName;
+    }
+    if (refName.startsWith(R_TAGS)) {
+      String newRefName = String.format("%s_%s", R_TAGS + R_BACKUPS + refName.replaceFirst(R_TAGS, ""),
+                                    new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
+
+      return newRefName;
+    }
     return refName;
   }
 

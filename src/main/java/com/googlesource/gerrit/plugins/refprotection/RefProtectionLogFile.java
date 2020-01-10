@@ -23,19 +23,17 @@
  */
 package com.googlesource.gerrit.plugins.refprotection;
 
-import com.google.gerrit.common.EventListener;
-import com.google.gerrit.extensions.registration.DynamicSet;
-import com.google.inject.AbstractModule;
-import com.google.inject.internal.UniqueAnnotations;
-import com.google.gerrit.extensions.events.LifecycleListener;
+import com.google.gerrit.extensions.systemstatus.ServerInformation;
+import com.google.gerrit.server.util.PluginLogFile;
+import com.google.gerrit.server.util.SystemLog;
+import com.google.inject.Inject;
 
-public class RefProtectionModule extends AbstractModule {
-  @Override
-  protected void configure() {
-    DynamicSet.bind(binder(), EventListener.class).to(RefUpdateListener.class);
+import org.apache.log4j.PatternLayout;
 
-    bind(LifecycleListener.class).annotatedWith(UniqueAnnotations.create()).to(RefProtectionLogFile.class);
-
-    requestStaticInjection(BackupRef.class);
+public class RefProtectionLogFile extends PluginLogFile {
+  static final String REFPROTECTION_LOG_NAME = "refprotection_log";
+  @Inject
+  public RefProtectionLogFile(SystemLog systemLog, ServerInformation serverInfo) {
+    super(systemLog, serverInfo, REFPROTECTION_LOG_NAME, new PatternLayout("[%d] [%t] %m%n"));
   }
 }

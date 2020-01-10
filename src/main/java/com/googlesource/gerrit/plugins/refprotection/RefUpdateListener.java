@@ -29,6 +29,7 @@ import static org.eclipse.jgit.lib.Constants.R_TAGS;
 import com.google.gerrit.extensions.annotations.PluginName;
 import com.google.gerrit.common.EventListener;
 import com.google.gerrit.reviewdb.client.Project;
+import com.google.gerrit.server.AccessPath;
 import com.google.gerrit.server.CurrentUser;
 import com.google.gerrit.server.config.PluginConfigFactory;
 import com.google.gerrit.server.events.Event;
@@ -50,9 +51,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 
 class RefUpdateListener implements EventListener {
+  static final Logger log = LoggerFactory.getLogger(RefProtectionLogFile.REFPROTECTION_LOG_NAME);
 
-  private static final Logger log =
-      LoggerFactory.getLogger(RefUpdateListener.class);
   private final ProjectControl.GenericFactory projectControl;
   private final CurrentUser user;
   private final GitRepositoryManager repoManager;
@@ -84,11 +84,14 @@ class RefUpdateListener implements EventListener {
       if ((protectDeleted || protectFastForward) && isRelevantRef(refUpdate)) {
         Project.NameKey nameKey = refUpdate.getProjectNameKey();
         try {
-          ProjectResource project =
-              new ProjectResource(projectControl.controlFor(nameKey, user));
-          if ((protectDeleted && isRefDeleted(refUpdate))
-              || (protectFastForward && isNonFastForwardUpdate(refUpdate,
-                  project))) {
+          ProjectResource project = new ProjectResource(projectControl.controlFor(nameKey, user));
+          if ((protectDeleted && isRefDeleted(refUpdate))|| (protectFastForward && isNonFastForwardUpdate(refUpdate, project))) {
+            if(user.getAccessPath() == AccessPath.GIT){
+              user.setAccessPath(AccessPath.REST_API);
+            }
+            log.info("" + user + " will delete ref");
+            log.info(String.format("Ref Deleted: project [%s] refname [%s] old object id [%s]",
+                    refUpdate.getProjectNameKey().toString(), refUpdate.getRefName(), refUpdate.refUpdate.oldRev));
             backupRef.createBackup(refUpdate, project);
           }
         } catch (NoSuchProjectException | IOException e) {
@@ -128,9 +131,7 @@ class RefUpdateListener implements EventListener {
    */
   private boolean isRefDeleted(RefUpdatedEvent event) {
     if (event.refUpdate.newRev.equals(ObjectId.zeroId().getName())) {
-      log.info(String.format(
-          "Ref Deleted: project [%s] refname [%s] old object id [%s]",
-          event.getProjectNameKey().toString(), event.getRefName(), event.refUpdate.oldRev));
+
       return true;
     }
     return false;

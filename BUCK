@@ -22,6 +22,10 @@ gerrit_plugin(
     'Gerrit-PluginName: ref-protection',
     'Gerrit-Module: com.googlesource.gerrit.plugins.refprotection.RefProtectionModule'
   ],
+    provided_deps = [
+    '//lib:gson',
+    '//lib/log:log4j'
+  ],
 )
 
 java_library(
