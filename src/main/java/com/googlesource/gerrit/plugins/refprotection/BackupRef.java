@@ -156,8 +156,13 @@ public class BackupRef {
                   .getId());
 
           try {
-            log.info(String.format("Ref  Backup: project [%s] refname [%s] new branch id [%s]",
-                        event.getProjectNameKey().toString(), input.ref, input.revision));
+            log.info(String.format(
+                    "Ref  Backup: project [%s] refname [%s] oldRev [%s] newRev [%s]",
+                        event.getProjectNameKey().toString(),
+                        input.ref,
+                        event.refUpdate.oldRev,
+                        event.refUpdate.newRev
+                ));
             createBranchFactory.create(backupRef).apply(project, input);
           } catch (BadRequestException | AuthException
               | ResourceConflictException | IOException e) {
