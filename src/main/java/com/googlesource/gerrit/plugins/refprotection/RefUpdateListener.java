@@ -59,8 +59,7 @@ class RefUpdateListener implements EventListener {
     private final CurrentUser user;
     private final GitRepositoryManager repoManager;
     private final BackupRef backupRef;
-    private final boolean protectDeleted;
-    private final boolean protectFastForward;
+
     private final IdentifiedUser.GenericFactory identifiedUserFactory;
 
     @Inject
@@ -77,10 +76,6 @@ class RefUpdateListener implements EventListener {
         this.repoManager = repoManager;
         this.backupRef = backupRef;
 
-        this.protectDeleted =
-                cfg.getFromGerritConfig(pluginName).getBoolean("protectDeleted", true);
-        this.protectFastForward =
-                cfg.getFromGerritConfig(pluginName).getBoolean("protectFastForward", true);
     }
 
     @Override
@@ -90,9 +85,9 @@ class RefUpdateListener implements EventListener {
             if (isRelevantRef(refUpdate)) {// check if 有意义的 ref;
                 Project.NameKey nameKey = refUpdate.getProjectNameKey();
                 try {
-                    ProjectResource  project = new ProjectResource(projectControl.controlFor(nameKey, user));
-                    if (   (isRefDeleted(refUpdate))   ||  ( isNonFastForwardUpdate(refUpdate, project))) {
-                         if (user.getAccessPath() == AccessPath.GIT) {//只有需要备份的时候 才走到这里,并且 是采用的git 强制push的操作
+                    ProjectResource project = new ProjectResource(projectControl.controlFor(nameKey, user));
+                    if ((isRefDeleted(refUpdate)) || (isNonFastForwardUpdate(refUpdate, project))) {
+                        if (user.getAccessPath() == AccessPath.GIT) {//只有需要备份的时候 才走到这里,并且 是采用的git 强制push的操作
                             IdentifiedUser otherUser = identifiedUserFactory.
                                     create(new Account.Id(Integer.parseInt("1000000")));// 这里做一个workaround的.尝试使用管理员账号来创建备份分支
                             otherUser.setAccessPath(AccessPath.REST_API);
@@ -100,7 +95,7 @@ class RefUpdateListener implements EventListener {
                         }
                         log.info("this user want to delete ref or no fast forward update ref: " + user);
                         log.info(String.format(
-                            "Ref Deleted: project [%s] refname [%s] oldRev [%s] newRev [%s]",
+                                "Ref Deleted: project [%s] refname [%s] oldRev [%s] newRev [%s]",
                                 refUpdate.getProjectNameKey().toString(),
                                 refUpdate.getRefName(),
                                 refUpdate.refUpdate.oldRev,
@@ -110,7 +105,7 @@ class RefUpdateListener implements EventListener {
                         backupRef.createBackup(refUpdate, project);
                     } else {
                         log.info(String.format(
-                            "not isRefDeleted or not NonFastForward: project [%s] refname [%s] oldRev [%s] newRev [%s]",
+                                "not isRefDeleted or not NonFastForward: project [%s] refname [%s] oldRev [%s] newRev [%s]",
                                 refUpdate.getProjectNameKey().toString(),
                                 refUpdate.getRefName(),
                                 refUpdate.refUpdate.oldRev,
@@ -122,7 +117,7 @@ class RefUpdateListener implements EventListener {
                 }
             } else {
                 log.info(String.format(
-                    "not a relevant ref: project [%s] refname [%s] oldRev [%s] newRev [%s]",
+                        "not a relevant ref: project [%s] refname [%s] oldRev [%s] newRev [%s]",
                         refUpdate.getProjectNameKey().toString(),
                         refUpdate.getRefName(),
                         refUpdate.refUpdate.oldRev,
