@@ -40,7 +40,6 @@ import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectInserter;
 import org.eclipse.jgit.lib.PersonIdent;
-import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.RefUpdate.Result;
 import org.eclipse.jgit.lib.Repository;
@@ -50,178 +49,150 @@ import org.eclipse.jgit.revwalk.RevWalk;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.eclipse.jgit.lib.Constants.R_HEADS;
-import static org.eclipse.jgit.lib.Constants.R_REFS;
-import static org.eclipse.jgit.lib.Constants.R_TAGS;
-
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+import static org.eclipse.jgit.lib.Constants.R_HEADS;
+import static org.eclipse.jgit.lib.Constants.R_TAGS;
+
 public class BackupRef {
-  public static final String R_BACKUPS = "backup/";
-  static final Logger log = LoggerFactory.getLogger(RefProtectionLogFile.REFPROTECTION_LOG_NAME);
+    static final Logger log = LoggerFactory.getLogger(RefProtectionLogFile.REFPROTECTION_LOG_NAME);
 
-  private final CreateBranch.Factory createBranchFactory;
-  @Inject private static PluginConfigFactory cfg;
-  @Inject private static GitRepositoryManager repoManager;
-  @Inject @PluginName private static String pluginName;
+    public static final String R_BACKUPS = "backup/";
 
-  @Inject
-  BackupRef(CreateBranch.Factory createBranchFactory) {
-    this.createBranchFactory = createBranchFactory;
-  }
+    private final CreateBranch.Factory createBranchFactory;
 
-  public void createBackup(RefUpdatedEvent event, ProjectResource project) {
-    String refName = event.getRefName();
+    @Inject
+    private static PluginConfigFactory cfg;
 
-    try (Repository git = repoManager.openRepository(project.getNameKey())) {
-      String backupRef = get(project, refName);
+    @Inject
+    private static GitRepositoryManager repoManager;
 
-      // No-op if the backup branch name is same as the original
-      if (backupRef.equals(refName)) {
-        return;
-      }
+    @Inject
+    @PluginName
+    private static String pluginName;
 
-      try (RevWalk revWalk = new RevWalk(git)) {
-        if (cfg.getFromGerritConfig(pluginName).getBoolean("createTag",
-            false)) {
-          TagBuilder tag = new TagBuilder();
-          tag.setTagger(
-              new PersonIdent(event.submitter.name, event.submitter.email));
-          tag.setObjectId(revWalk
-              .parseCommit(ObjectId.fromString(event.refUpdate.oldRev)));
-          String update = "Non-fast-forward update to";
-          if (event.refUpdate.newRev.equals(ObjectId.zeroId().getName())) {
-            update = "Deleted";
-          }
-          String type = "branch";
-          String fullMessage = "";
-          if (event.refUpdate.refName.startsWith(R_TAGS)) {
-            type = "tag";
-            try {
-              RevTag origTag =
-                  revWalk.parseTag(ObjectId.fromString(event.refUpdate.oldRev));
-              SimpleDateFormat format = new SimpleDateFormat("EEE MMM d HH:mm:ss yyyy ZZZZ");
-              PersonIdent taggerIdent = origTag.getTaggerIdent();
-              String tagger =
-                  String.format("Tagger: %s <%s>\nDate:   %s",
-                      taggerIdent.getName(), taggerIdent.getEmailAddress(),
-                      format.format(taggerIdent.getWhen()));
-              fullMessage = "\n\nOriginal tag:\n" + tagger + "\n\n" + origTag.getFullMessage();
-            } catch (MissingObjectException e) {
-              log.warn("Original tag does not exist", e);
-            } catch (IncorrectObjectTypeException e) {
-              log.warn("Original tag was not a tag", e);
-            } catch (IOException e) {
-              log.warn("Unable to read original tag details", e);
-            }
-          }
-          tag.setMessage(update + " " + type + " " + event.refUpdate.refName + fullMessage);
-          tag.setTag(backupRef);
+    @Inject
+    BackupRef(CreateBranch.Factory createBranchFactory) {
+        this.createBranchFactory = createBranchFactory;
+    }
 
-          ObjectInserter inserter = git.newObjectInserter();
-          ObjectId tagId = inserter.insert(tag);
-          inserter.flush();
-          RefUpdate tagRef = git.updateRef(tag.getTag());
-          tagRef.setNewObjectId(tagId);
-          tagRef.setRefLogMessage("tagged deleted branch/tag " + tag.getTag(),
-              false);
-          tagRef.setForceUpdate(false);
-          Result result = tagRef.update();
-          switch (result) {
-            case NEW:
-            case FORCED:
-              log.debug("Successfully created backup tag");
-              break;
+    public void createBackup(RefUpdatedEvent event, ProjectResource project) {
+        String refName = event.getRefName();  // 原来的分支名称
+        String backupRef = getTimestampBranch(refName);  // 备份分支名称
 
-            case LOCK_FAILURE:
-              log.error("Failed to lock repository while creating backup tag");
-              break;
+        if (backupRef.equals(refName)) {
+            return;
+        }
 
-            case REJECTED:
-              log.error("Tag already exists while creating backup tag");
-              break;
+        try (Repository git = repoManager.openRepository(project.getNameKey())) {
+            try (RevWalk revWalk = new RevWalk(git)) {
+                if (cfg.getFromGerritConfig(pluginName).getBoolean("createTag", false)) { //这个 是 以 创建 tag 的方式 来备份 分支
+                    craeteBackupbyTags(git, revWalk, event, backupRef);
+                } else {// 这个 是 以 创建 branch 的方式 来备份 分支
+                    createBackupByBranch(project, revWalk, event, backupRef);
+                }
+            }//end try (RevWalk revWalk = new RevWalk(git))
+        } catch (RepositoryNotFoundException e) {
+            log.error("Repository does not exist", e);
+        } catch (IOException e) {
+            log.error("Could not open repository", e);
+        }
+    }
 
-            default:
-              log.error("Unknown error while creating backup tag");
-          }
-        } else {
-          CreateBranch.Input input = new CreateBranch.Input();
-          input.ref = backupRef;
-          // We need to parse the commit to ensure if it's a tag, we get the
-          // commit the tag points to!
-          input.revision = ObjectId.toString(
-              revWalk.parseCommit(ObjectId.fromString(event.refUpdate.oldRev))
-                  .getId());
-
-          try {
+    private void createBackupByBranch(ProjectResource project, RevWalk revWalk, RefUpdatedEvent event, String backupRef) throws IOException{
+        CreateBranch.Input input = new CreateBranch.Input();
+        input.ref = backupRef;
+        input.revision = ObjectId.toString(revWalk.parseCommit(ObjectId.fromString(event.refUpdate.oldRev)).getId());
+        try {
             log.info(String.format(
                     "Ref  Backup: project [%s] refname [%s] oldRev [%s] newRev [%s]",
-                        event.getProjectNameKey().toString(),
-                        input.ref,
-                        event.refUpdate.oldRev,
-                        event.refUpdate.newRev
-                ));
+                    event.getProjectNameKey().toString(),
+                    input.ref,
+                    event.refUpdate.oldRev,
+                    event.refUpdate.newRev
+            ));
             createBranchFactory.create(backupRef).apply(project, input);
-          } catch (BadRequestException | AuthException
-              | ResourceConflictException | IOException e) {
+        } catch (BadRequestException | AuthException | ResourceConflictException | IOException e) {
             log.error(e.getMessage(), e);
-          }
         }
-      }
-    } catch (RepositoryNotFoundException e) {
-      log.error("Repository does not exist", e);
-    } catch (IOException e) {
-      log.error("Could not open repository", e);
     }
-  }
 
-  static String get(ProjectResource project, String refName) {
-    if (cfg.getFromGerritConfig(pluginName).getBoolean("useTimestamp", true)) {
-      return getTimestampBranch(refName);
-    }
-    else {
-      return getSequentialBranch(project, refName);
-    }
-  }
-
-  private static String getTimestampBranch(String refName) {
-    if (refName.startsWith(R_HEADS) ) {
-      String newRefName = String.format("%s_%s", R_HEADS + R_BACKUPS + refName.replaceFirst(R_HEADS, ""),
-                                    new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
-
-      return newRefName;
-    }
-    if (refName.startsWith(R_TAGS)) {
-      String newRefName = String.format("%s_%s", R_TAGS + R_BACKUPS + refName.replaceFirst(R_TAGS, ""),
-                                    new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
-
-      return newRefName;
-    }
-    return refName;
-  }
-
-  private static String getSequentialBranch(ProjectResource project, String branchName) {
-    Integer rev = 1;
-    String deletedName = branchName.replaceFirst(R_REFS, "");
-    try (Repository git = repoManager.openRepository(project.getNameKey())) {
-      for (Ref ref : git.getAllRefs().values()) {
-        String name = ref.getName();
-        if (name.startsWith(R_BACKUPS + deletedName + "/")) {
-          Integer thisNum =
-              Integer.parseInt(name.substring(name.lastIndexOf('/') + 1));
-          if (thisNum >= rev) {
-            rev = thisNum + 1;
-          }
+    private void craeteBackupbyTags(Repository git, RevWalk revWalk, RefUpdatedEvent event, String backupRef) throws IOException{
+        TagBuilder tag = new TagBuilder();
+        tag.setTagger(new PersonIdent(event.submitter.name, event.submitter.email));
+        tag.setObjectId(revWalk.parseCommit(ObjectId.fromString(event.refUpdate.oldRev)));
+        String update = "Non-fast-forward update to";
+        if (event.refUpdate.newRev.equals(ObjectId.zeroId().getName())) {
+            update = "Deleted";
         }
-      }
-    } catch (RepositoryNotFoundException e) {
-      log.error("Repository does not exist", e);
-    } catch (IOException e) {
-      log.error("Could not determine latest revision of deleted branch", e);
+        String type = "branch";
+        String fullMessage = "";
+        if (event.refUpdate.refName.startsWith(R_TAGS)) {
+            type = "tag";
+            try {
+                RevTag origTag = revWalk.parseTag(ObjectId.fromString(event.refUpdate.oldRev));
+                SimpleDateFormat format = new SimpleDateFormat("EEE MMM d HH:mm:ss yyyy ZZZZ");
+                PersonIdent taggerIdent = origTag.getTaggerIdent();
+                String tagger = String.format("Tagger: %s <%s>\nDate:   %s",
+                        taggerIdent.getName(),
+                        taggerIdent.getEmailAddress(),
+                        format.format(taggerIdent.getWhen()));
+                fullMessage = "\n\nOriginal tag:\n" + tagger + "\n\n" + origTag.getFullMessage();
+            } catch (MissingObjectException e) {
+                log.warn("Original tag does not exist", e);
+            } catch (IncorrectObjectTypeException e) {
+                log.warn("Original tag was not a tag", e);
+            } catch (IOException e) {
+                log.warn("Unable to read original tag details", e);
+            }
+        }
+        tag.setMessage(update + " " + type + " " + event.refUpdate.refName + fullMessage);
+        tag.setTag(backupRef);
+
+        ObjectInserter inserter = git.newObjectInserter();
+        ObjectId tagId = inserter.insert(tag);
+        inserter.flush();
+        RefUpdate tagRef = git.updateRef(tag.getTag());
+        tagRef.setNewObjectId(tagId);
+        tagRef.setRefLogMessage("tagged deleted branch/tag " + tag.getTag(), false);
+        tagRef.setForceUpdate(false);
+        Result result = tagRef.update();
+        switch (result) {
+            case NEW:
+            case FORCED:
+                log.debug("Successfully created backup tag");
+                break;
+
+            case LOCK_FAILURE:
+                log.error("Failed to lock repository while creating backup tag");
+                break;
+
+            case REJECTED:
+                log.error("Tag already exists while creating backup tag");
+                break;
+
+            default:
+                log.error("Unknown error while creating backup tag");
+        }
     }
 
-    return R_BACKUPS + deletedName + "/" + rev;
-  }
+    private static String getTimestampBranch(String refName) {
+        if (refName.startsWith(R_HEADS)) {
+            String newRefName = String.format("%s_%s", R_HEADS + R_BACKUPS + refName.replaceFirst(R_HEADS, ""),
+                    new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
+
+            return newRefName;
+        }
+        if (refName.startsWith(R_TAGS)) {
+            String newRefName = String.format("%s_%s", R_TAGS + R_BACKUPS + refName.replaceFirst(R_TAGS, ""),
+                    new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
+
+            return newRefName;
+        }
+        return refName;
+    }
+
+
 }
