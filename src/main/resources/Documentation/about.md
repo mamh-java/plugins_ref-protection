@@ -1,24 +1,24 @@
-Ref protection plugin.
+Ref protection plugin. 保护分支插件
 
-Protects against commits being lost by creating backups of deleted refs 
-(or non-fast-forward commits) under the `refs/backups/` namespace.
+```text
+1.
+对于 refs/heads/* 下面的,我通常称之为 分支. 这个插件就是保护分支,当删除了
+某个分支,或者强制推送修改了某个分支,就会触发这个插件,这个插件会在 refs/heads/backup/
+下面建立个备份的分支,备份分支命名是 原始分支名称 + 时间戳. 
+类似这样的格式的refs/heads/backup/branch-name-yyyyMMDD-HHmmss
 
-Branch deletion protection can be disabled by setting 
-`plugin.ref-protection.protectDeleted false` in `gerrit.config`.
-Similarly, non-fast-forward update protection can be disabled with
-`plugin.ref-protection.protectFastForward false`.
+2.
+对于 refs/tags/* 下面的,我通常称之为 标签. 这个插件同样的也会备份这个标签.
+和分支原理一样,refs/tags/backup/tag-name-yyyyMMDD-HHmmss
 
-Branches under `refs/heads/` that are deleted or rewritten are backed up
-as `refs/backups/heads/branch-name-YYYYMMDD-HHmmss` by default, or as
-sequentially increasing numbers under `refs/backups/heads/branch-name/#`
-by setting `plugin.ref-protection.useTimestamp false`.
+这个插件还有个这个 配置选项plugin.ref-protection.createTag true,默认这个是false的.
+如果打开这个,就会以创建备份的 tags 来备份 上面所说的 1,和2  分支/标签.
 
-Tags under `refs/tags/` that are deleted are backed up (as branches) as
-`refs/backups/tags/tag-name-YYYYMMDD-HHmmss` or as sequentially
-increasing numbers under `refs/backups/tags/branch-name/#` using the same
-`plugin.ref-protection.useTimestamp` setting.
 
-By default, the backups are created as branches.  Optionally, they may
-be created as tags, containing information about the original ref that
-was changed, as well as the user that performed the change.  This can
-be enabled by setting `plugin.ref-protection.createTag true`.
+
+plugin.ref-protection.useTimestamp 删除了
+
+plugin.ref-protection.protectFastForward 删除了
+
+
+```
