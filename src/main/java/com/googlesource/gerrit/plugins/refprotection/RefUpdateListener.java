@@ -135,9 +135,10 @@ class RefUpdateListener implements EventListener {
     RefUpdateAttribute refUpdate = event.refUpdate.get();
     if (refUpdate.newRev.equals(ObjectId.zeroId().getName())) {
       log.info(
-          String.format(
-              "Ref Deleted: project [%s] refname [%s] old object id [%s]",
-              event.getProjectNameKey().toString(), event.getRefName(), refUpdate.oldRev));
+          "Ref Deleted: project [{}] refname [{}] old object id [{}]",
+          event.getProjectNameKey(),
+          event.getRefName(),
+          refUpdate.oldRev);
       return true;
     }
     return false;
