@@ -171,7 +171,7 @@ public class BackupRef {
               | IOException
               | PermissionBackendException
               | NoSuchProjectException e) {
-            log.error(e.getMessage(), e);
+            log.error("Failed to create backup ref {}", backupRef, e);
           }
         }
       }
