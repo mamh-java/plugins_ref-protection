@@ -41,6 +41,7 @@ import com.google.gerrit.server.project.ProjectResource;
 import com.google.gerrit.server.project.ProjectState;
 import com.google.inject.Inject;
 import java.io.IOException;
+import java.util.Optional;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
@@ -95,12 +96,12 @@ class RefUpdateListener implements EventListener {
   }
 
   private ProjectResource getProjectResource(Project.NameKey nameKey)
-      throws IOException, NoSuchProjectException {
-    ProjectState state = projectCache.checkedGet(nameKey);
-    if (state == null) {
+      throws NoSuchProjectException {
+    Optional<ProjectState> state = projectCache.get(nameKey);
+    if (!state.isPresent()) {
       throw new NoSuchProjectException(nameKey);
     }
-    return new ProjectResource(state, user);
+    return new ProjectResource(state.get(), user);
   }
 
   /**
