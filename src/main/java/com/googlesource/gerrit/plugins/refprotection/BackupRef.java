@@ -33,6 +33,7 @@ import com.google.gerrit.extensions.restapi.AuthException;
 import com.google.gerrit.extensions.restapi.BadRequestException;
 import com.google.gerrit.extensions.restapi.IdString;
 import com.google.gerrit.extensions.restapi.ResourceConflictException;
+import com.google.gerrit.extensions.restapi.UnprocessableEntityException;
 import com.google.gerrit.server.config.PluginConfigFactory;
 import com.google.gerrit.server.data.AccountAttribute;
 import com.google.gerrit.server.data.RefUpdateAttribute;
@@ -170,7 +171,8 @@ public class BackupRef {
               | ResourceConflictException
               | IOException
               | PermissionBackendException
-              | NoSuchProjectException e) {
+              | NoSuchProjectException
+              | UnprocessableEntityException e) {
             log.error("Failed to create backup ref {}", backupRef, e);
           }
         }
